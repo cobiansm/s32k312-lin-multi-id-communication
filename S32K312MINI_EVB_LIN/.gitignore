@@ -1,0 +1,7 @@
+# S32 Design Studio build folders
+**/Debug/**
+**/Debug_FLASH/**
+**/Release/**
+**/Release_FLASH/**
+**/Build/**
+**/build/**
