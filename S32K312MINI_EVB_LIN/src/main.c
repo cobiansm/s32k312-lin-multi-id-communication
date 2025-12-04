@@ -54,7 +54,9 @@
 #define LIN_ID_3   32
 
 /* Global Variables */
-uint8 FlexioTxBuff[BUFFER_SIZE] = {0xAA, 0xBB, 0xCC, 0x55U};
+uint8 FlexioTxBuff1[BUFFER_SIZE] = { 0x01, 0x02, 0x03, 0x04};
+uint8 FlexioTxBuff2[BUFFER_SIZE] = { 0x05, 0x06, 0x07, 0x08};
+uint8 FlexioTxBuff3[BUFFER_SIZE] = {0x09, 0x10, 0x11, 0x12};
 uint8 LpuartTxBuff[BUFFER_SIZE] = {0xDD, 0xEE, 0xFF, 0x55U};
 
 Lpuart_Lin_Ip_PduType LinLpuartPdu[] =
@@ -80,18 +82,26 @@ Flexio_Lin_Ip_PduType LinFlexioPdu[] =
     {
 		.Pid = (uint8)FLEXIO_PID,
 		.Cs = FLEXIO_LIN_IP_ENHANCED_CS,
-		.SduPtr = FlexioTxBuff,
+		.SduPtr = FlexioTxBuff1,
 		.Drc = FLEXIO_LIN_IP_FRAMERESPONSE_TX,
 		.Dl = (uint8)BUFFER_SIZE
     },
     {
 		.Pid = (uint8)FLEXIO_PID,
 		.Cs = FLEXIO_LIN_IP_ENHANCED_CS,
-		.SduPtr = NULL_PTR,
-		.Drc = FLEXIO_LIN_IP_FRAMERESPONSE_RX,
+		.SduPtr = FlexioTxBuff2,
+		.Drc = FLEXIO_LIN_IP_FRAMERESPONSE_TX,
+		.Dl = (uint8)BUFFER_SIZE
+    },
+    {
+		.Pid = (uint8)FLEXIO_PID,
+		.Cs = FLEXIO_LIN_IP_ENHANCED_CS,
+		.SduPtr = FlexioTxBuff3,
+		.Drc = FLEXIO_LIN_IP_FRAMERESPONSE_TX,
 		.Dl = (uint8)BUFFER_SIZE
     }
 };
+
 
 static uint8_t Lin_CalcPid(uint8_t id);
 boolean CheckReceiveBuffer(uint8 *OriginalBuffer, uint8 * ReceiveBuffer);
@@ -118,9 +128,15 @@ int main(void)
 	IP_SIUL2->MSCR[31] |= SIUL2_MSCR_OBE_MASK;
 	IP_SIUL2->GPDO31 = SIUL2_GPDO0_PDO_n_MASK;
 
-	uint8_t pid = Lin_CalcPid(LIN_ID_1);
-	LinFlexioPdu[MASTER_ROLE].Pid = pid;
-	LinLpuartPdu[SLAVE_ROLE].Pid = pid;
+	uint8 slave1 = Lin_CalcPid(LIN_ID_1);
+	uint8 slave2 = Lin_CalcPid(LIN_ID_2);
+	uint8 slave3 = Lin_CalcPid(LIN_ID_3);
+
+	LinFlexioPdu[0].Pid = slave1;
+	LinFlexioPdu[1].Pid = slave2;
+	LinFlexioPdu[2].Pid = slave3;
+
+	LinLpuartPdu[SLAVE_ROLE].Pid = slave3;
 
 	/* Initialize all pins */
 	Siul2_Port_Ip_Init(NUM_OF_CONFIGURED_PINS_PortContainer_0_BOARD_InitPeripherals,
@@ -136,24 +152,24 @@ int main(void)
 	Flexio_Lin_Ip_Init(Flexio_Lin_Ip_Sa_pxHwConfigPB_0.Instance, &Flexio_Lin_Ip_Sa_pxHwConfigPB_0);
 
 	/* Start of the sending frame from Flexio Master*/
-	(void)Flexio_Lin_Ip_SendFrame(Flexio_Lin_Ip_Sa_pxHwConfigPB_0.Instance, &LinFlexioPdu[MASTER_ROLE]);
-
-	/*Wait for the transmission done on Master*/
-	TimeoutValue = 4*T_LIN_TIME_OUT;
-	do
+	for(uint8 i = 0; i < 3; i++)
 	{
-		FlexioMasterStatus = Flexio_Lin_Ip_GetStatus(Flexio_Lin_Ip_Sa_pxHwConfigPB_0.Instance, (const uint8 **)&DummyBuffer);
-	}
-	while ((FLEXIO_LIN_IP_STATUS_TX_OK != FlexioMasterStatus) && (TimeoutValue-- > 1));
+		Flexio_Lin_Ip_SendFrame(Flexio_Lin_Ip_Sa_pxHwConfigPB_0.Instance, &LinFlexioPdu[i]);
 
-	/*Wait for the transmission done */
+	    do {
+	        FlexioMasterStatus = Flexio_Lin_Ip_GetStatus(Flexio_Lin_Ip_Sa_pxHwConfigPB_0.Instance, (const uint8 **)&DummyBuffer);
+	    }
+	    while ((FLEXIO_LIN_IP_STATUS_TX_OK != FlexioMasterStatus) && (TimeoutValue-- > 1));
+	}
+
+	/* Wait for the transmission done */
 	 do
 	 {
 		 LpuartSlaveStatus = Lpuart_Lin_Ip_GetStatus(Lpuart_Lin_Ip_Sa_pxHwConfigPB_0.Instance, (uint8 **)&RecvBuffer[0]);
 	 }
 	 while ((LPUART_LIN_IP_STATUS_RX_OK != LpuartSlaveStatus) && (TimeoutValue-- > 1));
 
-	 CheckData = CheckReceiveBuffer(LinFlexioPdu[MASTER_ROLE].SduPtr, RecvBuffer[0]);
+	 CheckData = CheckReceiveBuffer(LinFlexioPdu[2].SduPtr, RecvBuffer[0]);
 
 	 if(CheckData)
 	 {
